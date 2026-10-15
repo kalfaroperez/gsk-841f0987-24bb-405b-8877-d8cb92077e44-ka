@@ -2,6 +2,8 @@
 
 Servicio HTTP en .NET que mantiene un leaderboard global de puntuaciones, agregadas por usuario sobre una ventana de tiempo configurable, con actualización near-real-time e ingesta concurrente segura.
 
+> **¿Primera vez? Sigue [EJECUTAR.md](EJECUTAR.md)**: guía paso a paso para clonar, ejecutar los tests y probar la API en 10 minutos.
+>
 > Razonamiento, decisiones y escalado: [SOLUTION.md](SOLUTION.md) · Arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ---
@@ -25,7 +27,7 @@ El desglose es aproximado: la planificación es el tiempo previo al primer commi
 
 ## Prerrequisitos
 
-- [.NET SDK 10.0.401](https://dotnet.microsoft.com/download) o superior (fijado en `global.json`)
+- [.NET SDK 9 o superior](https://dotnet.microsoft.com/download) (9.0.100+ o 10.x). El proyecto apunta a `net9.0` con `RollForward=Major`: compila con SDK 9 o 10 y se ejecuta sobre el runtime 9 o 10
 - **o** Docker 24+ con Docker Compose (no requiere el SDK)
 
 ---
@@ -248,7 +250,7 @@ deploy/
 
 **¿Para qué?**
 - Análisis crítico del enunciado: ambigüedades y qué se evalúa realmente
-- Plan de trabajo por fases y organización de la solución (arquitectura hexagonal ligera en .NET 10)
+- Plan de trabajo por fases y organización de la solución (arquitectura hexagonal ligera en .NET)
 - Generación de código con TDD: primero tests en rojo, luego implementación hasta verde, en cada capa
 - Generación de tests unitarios, de integración (incluida concurrencia real sobre SQLite) y E2E de carga
 - Ejecución y verificación: builds con analizadores estrictos, pruebas de humo con `curl`, despliegue y E2E contra Docker, medición de latencias

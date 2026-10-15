@@ -2,7 +2,7 @@
 
 ## 1. Resumen ejecutivo
 
-Servicio .NET 10 de leaderboard global con **arquitectura hexagonal ligera**: un dominio puro (ventana, buckets, idempotencia, ranking) separado de la persistencia mediante puertos. La agregación por ventana es **incremental por buckets de tiempo alineados**: cada lectura cuesta como máximo `Window / BucketSize` buckets por usuario, sin importar el volumen de eventos.
+Servicio .NET 9 (compatible con .NET 10) de leaderboard global con **arquitectura hexagonal ligera**: un dominio puro (ventana, buckets, idempotencia, ranking) separado de la persistencia mediante puertos. La agregación por ventana es **incremental por buckets de tiempo alineados**: cada lectura cuesta como máximo `Window / BucketSize` buckets por usuario, sin importar el volumen de eventos.
 
 **La escritura es exactamente-una-vez y atómica.** Cada evento tiene una identidad (`Idempotency-Key` o hash del payload) y se inserta junto con sus agregados en una sola transacción SQLite (`BEGIN IMMEDIATE`, incremento en SQL). Se probó con 1.000 escrituras concurrentes al mismo usuario, 500 reintentos idénticos y lectores concurrentes que nunca ven estados intermedios.
 
@@ -249,7 +249,7 @@ flowchart LR
 
 ## 9. Latencia y throughput
 
-Medido con `tests/Leaderboard.E2ETests` (cliente HTTP real, latencia vista por el cliente) el 2026-10-15, en un portátil con Windows 11, sobre .NET 10 en Release dentro del contenedor y Debug en el proceso local. Son números de un prototipo en una sola máquina, útiles para entender el comportamiento, **no** un benchmark de capacidad.
+Medido con `tests/Leaderboard.E2ETests` (cliente HTTP real, latencia vista por el cliente) el 2026-10-15, en un portátil con Windows 11, cuando el proyecto apuntaba a .NET 10 (Release dentro del contenedor, Debug en el proceso local). El paso posterior a `net9.0` no cambia el código de los caminos medidos. Son números de un prototipo en una sola máquina, útiles para entender el comportamiento, **no** un benchmark de capacidad.
 
 **Proceso local (Windows, SSD, Kestrel directo):**
 

@@ -127,6 +127,23 @@
 - **Aclaraciones relevantes:** la IA no estimó por su cuenta el tiempo total; pidió el dato real y usó el historial de commits solo para el desglose.
 - **Qué acepté / modifiqué / rechacé:** _TBD_
 
+## Entrada 11: Instructivo de ejecución y compatibilidad con .NET 9
+
+- **Fecha / fase:** 2026-10-15 · Entrega
+- **Modelo / herramienta:** Claude Opus 5.5 · Claude Code
+- **Prompts (literales):**
+  > Ahora elabora un instructivo sencillo, facil de leer, para que ejecutar este test en otra maquina localmente, exactamente en la maquina del espcialista tecnico
+
+  > Voy a necesitar ademas, bajar la version a 9.0 o superior
+- **Respuesta (resumen):**
+  - Creó `EJECUTAR.md` (guía de 10 minutos con camino .NET o Docker, keys por camino, pruebas desde PowerShell y curl, y tabla de problemas frecuentes) y `Leaderboard.Api.http` (12 peticiones listas para Visual Studio 2022 y VS Code), y validó cada comando desde un clon limpio.
+  - Bajó el target a `net9.0` con `RollForward=Major` y `LangVersion` 13 fijo, alineó los paquetes de Microsoft a 9.0.21 / 9.10.0, cambió `global.json` a 9.0.100 con `latestMajor` y la imagen Docker a las bases 9.0.
+- **Aclaraciones relevantes:**
+  - Detectó que `global.json` original (10.0.401 + `latestFeature`) habría impedido compilar en máquinas con un SDK 10.0.1xx.
+  - Evitó los paquetes 10.x en el target net9.0: HybridCache 10.11 arrastraba `Microsoft.Extensions.*` 10.x.
+  - Verificó en tres escenarios: SDK 10 + runtime 10 (Windows, por roll-forward), SDK 9.0.319 + runtime 9.0.21 reales (contenedor `sdk:9.0`, Linux) e imagen de despliegue sobre ASP.NET Core 9.0.21. En los tres pasaron los 128 tests o la prueba de humo.
+- **Qué acepté / modifiqué / rechacé:** _TBD_
+
 ---
 
 ## Plantilla de entrada

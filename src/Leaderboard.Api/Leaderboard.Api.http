@@ -1,0 +1,71 @@
+# Peticiones de ejemplo para probar la API a mano.
+# Visual Studio 2022 (17.8+) y JetBrains Rider las ejecutan de forma nativa: clic en "Send request" / "Enviar solicitud".
+# En VS Code: instalar la extensión "REST Client" (humao.rest-client) y usar "Send Request".
+# Requiere la API corriendo:  dotnet run --project src/Leaderboard.Api   (o Docker; ver EJECUTAR.md)
+
+@base = http://localhost:8080
+# Keys de Development (dotnet run). Con Docker usar demo-writer-key / demo-reader-key.
+@writerKey = dev-ingestor-key
+@readerKey = dev-reader-key
+
+### 1. Salud (pública)
+GET {{base}}/health/ready
+
+### 2. Registrar una puntuación (201 Created)
+# {{$datetime iso8601}} = fecha actual en UTC (Visual Studio 2022 y REST Client). En Rider usar {{$isoTimestamp}}.
+POST {{base}}/score
+Content-Type: application/json
+X-Api-Key: {{writerKey}}
+Idempotency-Key: demo-alice-1
+
+{ "user_id": "alice", "score": 50, "timestamp": "{{$datetime iso8601}}" }
+
+### 3. Reintentar la MISMA petición (200 duplicate: no vuelve a sumar)
+POST {{base}}/score
+Content-Type: application/json
+X-Api-Key: {{writerKey}}
+Idempotency-Key: demo-alice-1
+
+{ "user_id": "alice", "score": 50, "timestamp": "{{$datetime iso8601}}" }
+
+### 4. Otra puntuación para otro usuario
+POST {{base}}/score
+Content-Type: application/json
+X-Api-Key: {{writerKey}}
+
+{ "user_id": "bob", "score": 80, "timestamp": "{{$datetime iso8601}}" }
+
+### 5. Top N (lectura)
+GET {{base}}/leaderboard?top=10
+X-Api-Key: {{readerKey}}
+
+### 6. Score de un usuario
+GET {{base}}/user/alice/score
+X-Api-Key: {{readerKey}}
+
+### 7. Usuario inexistente (404)
+GET {{base}}/user/nadie/score
+X-Api-Key: {{readerKey}}
+
+### 8. Payload inválido (400 con todos los errores)
+POST {{base}}/score
+Content-Type: application/json
+X-Api-Key: {{writerKey}}
+
+{ "user_id": "bad id", "score": -1, "timestamp": "2030-01-01T00:00:00Z" }
+
+### 9. Sin API key (401)
+GET {{base}}/leaderboard
+
+### 10. Key de solo lectura intentando escribir (403)
+POST {{base}}/score
+Content-Type: application/json
+X-Api-Key: {{readerKey}}
+
+{ "user_id": "alice", "score": 1, "timestamp": "{{$datetime iso8601}}" }
+
+### 11. Métricas Prometheus (pública)
+GET {{base}}/metrics
+
+### 12. Contrato OpenAPI (público)
+GET {{base}}/openapi/v1.json

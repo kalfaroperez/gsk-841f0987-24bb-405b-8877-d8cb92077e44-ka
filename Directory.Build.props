@@ -1,7 +1,10 @@
 <Project>
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
+    <TargetFramework>net9.0</TargetFramework>
+    <!-- Run on .NET 9 or any newer runtime (e.g. a machine with only .NET 10 installed). -->
+    <RollForward>Major</RollForward>
+    <!-- Pinned so SDK 9 and SDK 10 compile exactly the same language. -->
+    <LangVersion>13.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
