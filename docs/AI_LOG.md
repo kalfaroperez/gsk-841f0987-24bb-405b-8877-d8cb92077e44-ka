@@ -65,6 +65,19 @@ GUÍA
   - Se detectó que los ADRs del commit inicial tenían la codificación corrupta (PowerShell 5.1 leyó UTF-8 como ANSI), y se regeneraron.
 - **Qué acepté / modifiqué / rechacé:** _TBD_
 
+## Entrada 6: Application y persistencia SQLite
+
+- **Fecha / fase:** 2026-10-15 · Implementación (Application + Infrastructure)
+- **Modelo / herramienta:** Claude Opus 5.5 · Claude Code
+- **Prompt (literal):**
+  > Empieza la fase de Application y la persistencia SQLite (puertos, casos de uso, adapter con incremento atómico) con sus tests
+- **Respuesta (resumen):** Definió los puertos `IScoreWriteStore` e `ILeaderboardReadStore`, los casos de uso `SubmitScore`, `GetLeaderboard` y `GetUserScore` (con `TimeProvider` inyectado) y `LeaderboardQueryLimits`. Implementó el adaptador SQLite: WAL, `BEGIN IMMEDIATE`, `ON CONFLICT DO NOTHING` para deduplicar, upsert con incremento en SQL, `CHECK` contra el overflow silencioso, ticks UTC como `INTEGER` e índice cubriente. Escribió 15 tests de casos de uso con un store en memoria y 10 de integración: 3 de concurrencia real y uno que compara el SQL contra la implementación de referencia del dominio.
+- **Aclaraciones relevantes:**
+  - Los tests se escribieron con `TestContext.Current` (xUnit v3), pero el proyecto usa xUnit 2.9; se reemplazó por `CancellationToken.None`.
+  - Se hizo un experimento para no sobre-afirmar: al quitar el semáforo de escritura, los tests de concurrencia siguen pasando. La exactitud viene de la transacción `IMMEDIATE`, no del semáforo, y así quedó documentado.
+  - Decisión `404` vs `0`: `404` solo si el usuario nunca envió puntuaciones.
+- **Qué acepté / modifiqué / rechacé:** _TBD_
+
 ---
 
 ## Plantilla de entrada
