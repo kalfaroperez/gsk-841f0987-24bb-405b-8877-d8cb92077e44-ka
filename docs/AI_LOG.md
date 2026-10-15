@@ -105,6 +105,22 @@ GUÍA
   - En Docker Desktop el throughput de escritura cae a ~120 req/s y el p99 llega a ~10 s. Se documentó tal cual, junto con la mejora concreta (group commit), en lugar de ocultarlo o ajustar el test para que se viera mejor.
 - **Qué acepté / modifiqué / rechacé:** _TBD_
 
+## Entrada 9: Escalado, despliegue, recuperación y resumen ejecutivo
+
+- **Fecha / fase:** 2026-10-15 · Documentación
+- **Modelo / herramienta:** Claude Opus 5.5 · Claude Code
+- **Prompt (literal):**
+  > Completa SOLUTION §8 (escala a 100k req/s con cálculos), §12, §13, §14 y el resumen ejecutivo
+- **Respuesta (resumen):**
+  - §8: supuestos explícitos y cálculos de ancho de banda, retención del log, pods API (con tolerancia a la caída de una zona), particiones, agregadores, ops y memoria de Redis, estado de deduplicación y almacenamiento; arquitectura objetivo y cuellos de botella con mitigaciones.
+  - §12: pipeline CI/CD con E2E contra el contenedor, canary con criterios automáticos, migraciones expand/contract y las limitaciones de desplegar el prototipo con SQLite.
+  - §13: rollback de código y recuperación de datos con RPO/RTO por escenario.
+  - §14: limitaciones y trabajo futuro orientado a integraciones con varias compañías (multi-tenancy, contrato versionado, ingesta por lotes).
+- **Aclaraciones relevantes:**
+  - Se decidió y justificó un cambio de contrato para producción (`202 Accepted` con deduplicación asíncrona), porque deduplicar de forma síncrona antes del log tiene un modo de falla que pierde eventos.
+  - Los números de capacidad son supuestos conservadores declarados, no mediciones. Las mediciones reales del prototipo están en §9.
+- **Qué acepté / modifiqué / rechacé:** _TBD_
+
 ---
 
 ## Plantilla de entrada
