@@ -42,63 +42,108 @@ dotnet run --project src/Leaderboard.Api
 docker compose -f deploy/docker-compose.yml up --build
 ```
 
-<!-- GUÍA: confirmar puerto real y URL de OpenAPI cuando estén implementados. -->
-- API: `http://localhost:_TBD_`
-- OpenAPI: `http://localhost:_TBD_/openapi/v1.json`
-- Health: `http://localhost:_TBD_/health/ready`
+La opción A arranca en modo `Development` con dos API keys de prueba (definidas en `src/Leaderboard.Api/appsettings.Development.json`):
+
+| API key | Permisos |
+|---|---|
+| `dev-ingestor-key` | `scores:write`, `scores:read` |
+| `dev-reader-key` | `scores:read` |
+
+La base de datos SQLite se crea sola al arrancar en `src/Leaderboard.Api/data/leaderboard.db`.
+
+| Recurso | URL | Auth |
+|---|---|---|
+| API | `http://localhost:8080` | `X-Api-Key` |
+| OpenAPI | `http://localhost:8080/openapi/v1.json` | pública |
+| Liveness / readiness | `http://localhost:8080/health/live`, `/health/ready` | pública |
+| Métricas (Prometheus) | `http://localhost:8080/metrics` | pública (en producción: solo red interna) |
 
 ---
 
 ## Configuración
 
-<!-- GUÍA: una fila por opción de LeaderboardOptions / seguridad. Mantener sincronizado con appsettings.json. -->
+Todas las opciones se validan al arrancar: una configuración inválida impide que el servicio inicie. Por variable de entorno se usa `__` como separador de sección.
 
 | Variable | Descripción | Default |
 |---|---|---|
-| `Leaderboard__Window` | Ventana de agregación | `7.00:00:00` |
-| `Leaderboard__BucketSize` | Tamaño del bucket temporal | `00:01:00` |
-| `Leaderboard__MaxTop` | Máximo permitido para `top` | `_TBD_` |
-| `Leaderboard__DefaultTop` | `top` por defecto | `_TBD_` |
+| `ConnectionStrings__Leaderboard` | Cadena de conexión SQLite | `Data Source=data/leaderboard.db` |
+| `Leaderboard__Window` | Ventana de agregación (múltiplo de `BucketSize`) | `7.00:00:00` |
+| `Leaderboard__BucketSize` | Tamaño del bucket temporal (divisor de un día) | `00:01:00` |
 | `Leaderboard__FutureSkewTolerance` | Tolerancia para timestamps futuros | `00:05:00` |
-| `Leaderboard__CacheTtl` | TTL de caché del leaderboard | `00:00:01` |
-| `Auth__ApiKeys__*` | API keys válidas | _ver SOLUTION.md_ |
-| `RateLimit__PermitsPerSecond` | Límite por API key | `_TBD_` |
+| `Leaderboard__MaxPointsPerEvent` | Puntos máximos por evento | `1000000` |
+| `Leaderboard__DefaultTop` | `top` por defecto | `10` |
+| `Leaderboard__MaxTop` | Máximo permitido para `top` | `100` |
+| `Leaderboard__CacheTtl` | Obsolescencia máxima de `GET /leaderboard` (`0` desactiva la caché) | `00:00:01` |
+| `Auth__ApiKeys__0__Name` / `__Key` / `__Roles__0` | API keys y sus roles (`scores:write`, `scores:read`). Sin keys, todo responde `401` | _ninguna fuera de Development_ |
+| `RateLimit__PermitsPerSecond` | Peticiones sostenidas por segundo por API key (o por IP sin key) | `500` |
+| `RateLimit__Burst` | Tamaño de ráfaga del token bucket | `1000` |
+| `Telemetry__OtlpEndpoint` | Endpoint OTLP para exportar trazas (opcional) | _vacío_ |
 
 ---
 
 ## Uso de la API
 
-<!-- GUÍA: un curl por endpoint + respuesta de ejemplo REAL (copiada de una ejecución). -->
+Respuestas reales, copiadas de una ejecución local. Todo el JSON usa `snake_case` y los errores siguen RFC 9457 (`application/problem+json`).
 
-### Registrar puntuación
+### Registrar puntuación: `POST /score`
 
 ```bash
-curl -X POST http://localhost:_TBD_/score -H "Content-Type: application/json" -H "X-Api-Key: _TBD_" -H "Idempotency-Key: 6f1c0e1a-0001" -d "{\"user_id\":\"alice\",\"score\":50,\"timestamp\":\"2026-10-15T12:00:00Z\"}"
+curl -i -X POST http://localhost:8080/score -H "Content-Type: application/json" -H "X-Api-Key: dev-ingestor-key" -H "Idempotency-Key: smoke-1" -d "{\"user_id\":\"alice\",\"score\":50,\"timestamp\":\"2026-10-15T19:16:00Z\"}"
+```
+
+```
+HTTP/1.1 201 Created
+Location: /user/alice/score
+X-Correlation-Id: 62cf6098ed89ca0e466d9f7efb010659
+
+{"event_id":"k:smoke-1","status":"created"}
+```
+
+Un reintento con el mismo `Idempotency-Key` devuelve `200 {"event_id":"k:smoke-1","status":"duplicate"}` y no vuelve a sumar. Sin `Idempotency-Key`, la identidad del evento es un hash del payload (`h:…`).
+
+Payload inválido (devuelve **todos** los errores a la vez, con códigos estables):
+
+```json
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400,
+ "errors":{"user_id":["user_id must be 1-64 characters from [A-Za-z0-9_.-]."],"score":["score must be between 0 and 1000000."],"timestamp":["timestamp cannot be more than 00:05:00 ahead of server time."]},
+ "error_codes":["user_id.invalid","score.out_of_range","timestamp.in_future"],"trace_id":"bf7964d048d04cb0435076aff0e14e92"}
+```
+
+### Top N: `GET /leaderboard?top=N`
+
+```bash
+curl "http://localhost:8080/leaderboard?top=5" -H "X-Api-Key: dev-reader-key"
 ```
 
 ```json
-_TBD_
+{"window_start":"2026-10-08T19:17:00+00:00","window_end":"2026-10-15T19:17:00+00:00","generated_at":"2026-10-15T19:16:14.5407379+00:00",
+ "entries":[{"rank":1,"user_id":"bob","score":80},{"rank":2,"user_id":"alice","score":50}]}
 ```
 
-### Top N
+`generated_at` es el momento en que se leyeron los datos. Si la respuesta viene de la caché, puede ser hasta `CacheTtl` anterior a la petición.
+
+### Score de un usuario: `GET /user/{id}/score`
 
 ```bash
-curl "http://localhost:_TBD_/leaderboard?top=10" -H "X-Api-Key: _TBD_"
+curl http://localhost:8080/user/alice/score -H "X-Api-Key: dev-reader-key"
 ```
 
 ```json
-_TBD_
+{"user_id":"alice","window_score":50,"all_time_score":50,"window_start":"2026-10-08T19:17:00+00:00","window_end":"2026-10-15T19:17:00+00:00"}
 ```
 
-### Score de un usuario
+Un usuario que nunca envió puntuaciones devuelve `404` (`error_codes: ["user.not_found"]`).
 
-```bash
-curl http://localhost:_TBD_/user/alice/score -H "X-Api-Key: _TBD_"
-```
+### Códigos de estado
 
-```json
-_TBD_
-```
+| Código | Cuándo |
+|---|---|
+| `201` / `200` | Puntuación creada / duplicado idempotente |
+| `400` | Validación (campos, `top`, `Idempotency-Key`, JSON mal formado) |
+| `401` | Falta `X-Api-Key` o no es válida |
+| `403` | La key no tiene el rol requerido (p. ej. una key de lectura haciendo `POST`) |
+| `404` | Usuario sin puntuaciones |
+| `429` | Rate limit superado (incluye `Retry-After`) |
 
 ---
 
@@ -122,13 +167,13 @@ dotnet test tests/Leaderboard.IntegrationTests
 dotnet test tests/Leaderboard.E2ETests
 ```
 
-<!-- GUÍA: describir qué cubre cada suite y qué salida esperar (n.º de tests, duración aproximada). -->
+| Suite | Tests | Cubre |
+|---|---|---|
+| UnitTests | 84 | Dominio (ventana, buckets, idempotencia, ranking) y casos de uso con reloj falso |
+| IntegrationTests | 39 | SQLite real: concurrencia (1.000 escrituras al mismo usuario, 500 reintentos idénticos, lecturas sin estados intermedios) y equivalencia SQL vs dominio. API HTTP en memoria: contratos, validación, 401/403/429, caché, health, métricas, OpenAPI |
+| E2ETests | _TBD_ | Simulación de carga contra el servicio en ejecución |
 
-| Suite | Cubre |
-|---|---|
-| UnitTests | Lógica de agregación, ventana, buckets, desempates, idempotencia |
-| IntegrationTests | Contratos HTTP, validación, auth, rate limit, ventana con reloj falso |
-| E2ETests | Ingesta concurrente (sin pérdida de actualizaciones), idempotencia bajo carga, lecturas consistentes |
+Salida esperada (unos 15 s en total): `Correctas! - Con error: 0, Superado: 84` y `Superado: 39`.
 
 ---
 

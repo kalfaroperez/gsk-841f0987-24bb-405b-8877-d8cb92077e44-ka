@@ -34,6 +34,7 @@ public sealed class SqliteDatabase
         """;
 
     private readonly string _connectionString;
+    private readonly string _dataSource;
 
     public SqliteDatabase(string connectionString)
     {
@@ -43,6 +44,7 @@ public sealed class SqliteDatabase
             Pooling = true,
         };
         _connectionString = builder.ToString();
+        _dataSource = builder.DataSource;
     }
 
     public async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
@@ -67,9 +69,27 @@ public sealed class SqliteDatabase
         }
     }
 
+    /// <summary>Cheap liveness probe of the database file (used by the readiness health check).</summary>
+    public async Task<bool> CanConnectAsync(CancellationToken cancellationToken)
+    {
+        SqliteConnection connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sqlite_master WHERE name = 'score_events';",
+                cancellationToken: cancellationToken)).ConfigureAwait(false) == 1;
+        }
+    }
+
     /// <summary>Idempotent: enables WAL (persistent per database file) and creates the schema if missing.</summary>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
+        string? directory = Path.GetDirectoryName(Path.GetFullPath(_dataSource));
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         SqliteConnection connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))
         {

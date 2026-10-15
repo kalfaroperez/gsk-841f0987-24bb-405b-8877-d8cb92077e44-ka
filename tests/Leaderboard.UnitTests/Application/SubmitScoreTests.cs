@@ -8,10 +8,14 @@ namespace Leaderboard.UnitTests.Application;
 public class SubmitScoreTests
 {
     private readonly FakeTimeProvider _clock = new(TestData.At("2026-10-15T12:00:00Z"));
-    private readonly InMemoryScoreStore _store = new(TestData.Rules);
+    private readonly InMemoryScoreStore _store;
     private readonly SubmitScore _sut;
 
-    public SubmitScoreTests() => _sut = new SubmitScore(_store, TestData.Rules, _clock);
+    public SubmitScoreTests()
+    {
+        _store = new InMemoryScoreStore(TestData.Rules, _clock);
+        _sut = new SubmitScore(_store, TestData.Rules, _clock);
+    }
 
     private SubmitScoreCommand Command(string user = "alice", long score = 50, string? key = null) =>
         new(user, score, _clock.GetUtcNow(), key);

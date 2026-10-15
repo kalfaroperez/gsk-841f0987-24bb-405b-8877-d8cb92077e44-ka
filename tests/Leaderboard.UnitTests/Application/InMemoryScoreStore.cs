@@ -6,7 +6,7 @@ namespace Leaderboard.UnitTests.Application;
 /// <summary>
 /// Test double built on the domain's reference aggregation, so use-case tests do not depend on SQL.
 /// </summary>
-internal sealed class InMemoryScoreStore(LeaderboardRules rules) : IScoreWriteStore, ILeaderboardReadStore
+internal sealed class InMemoryScoreStore(LeaderboardRules rules, TimeProvider clock) : IScoreWriteStore, ILeaderboardReadStore
 {
     private readonly Lock _gate = new();
     private readonly Dictionary<EventId, ScoreEvent> _events = [];
@@ -30,11 +30,12 @@ internal sealed class InMemoryScoreStore(LeaderboardRules rules) : IScoreWriteSt
         }
     }
 
-    public Task<IReadOnlyList<LeaderboardEntry>> GetTopAsync(AggregationWindow window, int top, CancellationToken cancellationToken)
+    public Task<LeaderboardSnapshot> GetTopAsync(AggregationWindow window, int top, CancellationToken cancellationToken)
     {
         lock (_gate)
         {
-            return Task.FromResult(Ranking.Top(WindowAggregation.Totals(Buckets(), window), top));
+            IReadOnlyList<LeaderboardEntry> entries = Ranking.Top(WindowAggregation.Totals(Buckets(), window), top);
+            return Task.FromResult(new LeaderboardSnapshot(entries, clock.GetUtcNow()));
         }
     }
 

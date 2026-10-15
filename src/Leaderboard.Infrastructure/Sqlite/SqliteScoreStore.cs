@@ -95,7 +95,7 @@ public sealed class SqliteScoreStore(SqliteDatabase database, LeaderboardRules r
         }
     }
 
-    public async Task<IReadOnlyList<LeaderboardEntry>> GetTopAsync(AggregationWindow window, int top, CancellationToken cancellationToken)
+    public async Task<LeaderboardSnapshot> GetTopAsync(AggregationWindow window, int top, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(top, 0);
@@ -103,14 +103,16 @@ public sealed class SqliteScoreStore(SqliteDatabase database, LeaderboardRules r
         SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))
         {
+            DateTimeOffset asOf = clock.GetUtcNow();
             IEnumerable<TopRow> rows = await connection.QueryAsync<TopRow>(new CommandDefinition(
                 TopSql,
                 new { Start = window.Start.UtcTicks, End = window.End.UtcTicks, Top = top },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-            return rows
+            LeaderboardEntry[] entries = rows
                 .Select((row, i) => new LeaderboardEntry(i + 1, UserId.Create(row.UserId).Value, row.Score))
                 .ToArray();
+            return new LeaderboardSnapshot(entries, asOf);
         }
     }
 

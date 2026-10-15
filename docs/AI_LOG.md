@@ -78,6 +78,20 @@ GUÍA
   - Decisión `404` vs `0`: `404` solo si el usuario nunca envió puntuaciones.
 - **Qué acepté / modifiqué / rechacé:** _TBD_
 
+## Entrada 7: Capa Api
+
+- **Fecha / fase:** 2026-10-15 · Implementación (Api)
+- **Modelo / herramienta:** Claude Opus 5.5 · Claude Code
+- **Prompt (literal):**
+  > Empieza la fase de Api: endpoints, ProblemDetails, API key, rate limit, caché del top-N, health y OpenTelemetry, con tests de integración HTTP
+- **Respuesta (resumen):** Primero escribió 29 tests HTTP con `WebApplicationFactory` (SQLite temporal, `FakeTimeProvider`, keys de prueba). Después implementó los 3 endpoints con contratos en snake_case, errores RFC 9457 con `error_codes` estables, autenticación por API key con comparación en tiempo constante y roles, rate limit con token bucket por cliente, caché del top-N con `HybridCache` (coalescencia de misses), health live/ready, OpenTelemetry (Prometheus y OTLP opcional), correlation id y validación de configuración al arrancar. Hizo una prueba de humo con `dotnet run` y `curl`.
+- **Aclaraciones relevantes:**
+  - La configuración se resuelve perezosamente desde DI (Options + `ValidateOnStart`) en lugar de leerse antes de `Build()`, para que los tests puedan sobrescribirla.
+  - Se cambió el puerto de lectura para devolver `LeaderboardSnapshot` con `AsOf`. Así `generated_at` refleja el momento real de lectura aunque la respuesta venga de caché, en lugar de mentir sobre la frescura.
+  - El test de rate limit se rediseñó para no depender del tiempo (se valida sobre la propia ráfaga).
+  - La primera versión de los tests usaba inicializadores de campo que referenciaban otros campos (CS0236); se movieron a los constructores.
+- **Qué acepté / modifiqué / rechacé:** _TBD_
+
 ---
 
 ## Plantilla de entrada

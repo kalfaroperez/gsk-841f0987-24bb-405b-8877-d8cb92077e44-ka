@@ -8,12 +8,13 @@ namespace Leaderboard.UnitTests.Application;
 public class GetUserScoreTests
 {
     private readonly FakeTimeProvider _clock = new(TestData.At("2026-10-15T12:00:00Z"));
-    private readonly InMemoryScoreStore _store = new(TestData.Rules);
+    private readonly InMemoryScoreStore _store;
     private readonly SubmitScore _submit;
     private readonly GetUserScore _sut;
 
     public GetUserScoreTests()
     {
+        _store = new InMemoryScoreStore(TestData.Rules, _clock);
         _submit = new SubmitScore(_store, TestData.Rules, _clock);
         _sut = new GetUserScore(_store, TestData.Rules, _clock);
     }

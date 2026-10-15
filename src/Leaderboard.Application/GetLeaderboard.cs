@@ -2,7 +2,10 @@ using Leaderboard.Domain;
 
 namespace Leaderboard.Application;
 
-/// <summary>Top-N snapshot. Window bounds and generation time are exposed so clients can reason about freshness.</summary>
+/// <summary>
+/// Top-N view. Window bounds and <see cref="GeneratedAt"/> (when the data was read, which may be earlier than
+/// the request if served from cache) are exposed so clients can reason about freshness.
+/// </summary>
 public sealed record LeaderboardView(
     DateTimeOffset WindowStart,
     DateTimeOffset WindowEnd,
@@ -25,10 +28,9 @@ public sealed class GetLeaderboard(
                 $"top must be between 1 and {limits.MaxTop}."));
         }
 
-        DateTimeOffset now = clock.GetUtcNow();
-        AggregationWindow window = AggregationWindow.EndingAt(now, rules);
-        IReadOnlyList<LeaderboardEntry> entries = await store.GetTopAsync(window, n, cancellationToken).ConfigureAwait(false);
+        AggregationWindow window = AggregationWindow.EndingAt(clock.GetUtcNow(), rules);
+        LeaderboardSnapshot snapshot = await store.GetTopAsync(window, n, cancellationToken).ConfigureAwait(false);
 
-        return Result<LeaderboardView>.Success(new LeaderboardView(window.Start, window.End, now, entries));
+        return Result<LeaderboardView>.Success(new LeaderboardView(window.Start, window.End, snapshot.AsOf, snapshot.Entries));
     }
 }

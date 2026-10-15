@@ -54,7 +54,7 @@ public sealed class SqliteScoreStoreTests : IAsyncLifetime
         await _db.Store.AppendAsync(_db.Event("alice", 20), Ct);
         await _db.Store.AppendAsync(_db.Event("alice", 500, SqliteStoreFixture.Now.AddDays(-8)), Ct);
 
-        IReadOnlyList<LeaderboardEntry> top = await _db.Store.GetTopAsync(_db.Window, 10, Ct);
+        IReadOnlyList<LeaderboardEntry> top = (await _db.Store.GetTopAsync(_db.Window, 10, Ct)).Entries;
 
         Assert.Equal(
             [(1, "alice", 20L), (2, "bob", 20L), (3, "carol", 20L)],
@@ -69,7 +69,7 @@ public sealed class SqliteScoreStoreTests : IAsyncLifetime
             await _db.Store.AppendAsync(_db.Event($"u{i}", i + 1), Ct);
         }
 
-        IReadOnlyList<LeaderboardEntry> top = await _db.Store.GetTopAsync(_db.Window, 2, Ct);
+        IReadOnlyList<LeaderboardEntry> top = (await _db.Store.GetTopAsync(_db.Window, 2, Ct)).Entries;
 
         Assert.Equal(["u4", "u3"], top.Select(e => e.UserId.Value));
     }
@@ -110,6 +110,6 @@ public sealed class SqliteScoreStoreTests : IAsyncLifetime
             WindowAggregation.Totals(accepted.Select(e => new ScoreBucket(e.UserId, e.BucketStart(_db.Rules.BucketSize), e.Points)), _db.Window),
             100);
 
-        Assert.Equal(expected, await _db.Store.GetTopAsync(_db.Window, 100, Ct));
+        Assert.Equal(expected, (await _db.Store.GetTopAsync(_db.Window, 100, Ct)).Entries);
     }
 }

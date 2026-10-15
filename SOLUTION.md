@@ -122,12 +122,14 @@ Resultado: `alice = 25`, `bob = 7` (histórico de alice = 125).
 
 - **Orden global de eventos:** la suma es conmutativa, así que el orden de llegada no afecta el resultado.
 - **Deduplicación de eventos legítimamente idénticos sin `Idempotency-Key`:** mismo usuario, puntos e instante cuentan una vez ([ADR-002](docs/ADR/002-idempotencia-de-escritura.md)).
-- **Lectura-tras-escritura con caché:** el leaderboard puede estar desfasado hasta el TTL de la caché (se agrega en la fase de API).
+- **Lectura-tras-escritura en `GET /leaderboard`:** puede estar desfasado hasta `CacheTtl` (1 s). `GET /user/{id}/score` no se cachea y sí refleja de inmediato las escrituras propias.
 - **Escalado de escritura horizontal:** SQLite admite un solo escritor (ver sección 8).
 
 ### Frescura (near-real-time)
 
-_TBD: obsolescencia máxima del leaderboard = TTL de caché. Justificar valor._
+- **Escritura → agregado:** inmediato. El bucket y el total se actualizan en la misma transacción que el evento; no hay un job asíncrono intermedio.
+- **Agregado → `GET /leaderboard`:** obsolescencia máxima = `CacheTtl` (1 s por defecto). La respuesta incluye `generated_at` (momento real de lectura), así que el cliente puede medirla. Detalle: [ADR-004](docs/ADR/004-cache-del-leaderboard.md).
+- **Por qué 1 s:** un humano no percibe un retraso de 1 s en un ranking, y acota la carga de lectura sobre el store a ~1 consulta/s por cada `top` distinto, sin importar el tráfico.
 
 ---
 
@@ -138,9 +140,10 @@ _TBD: obsolescencia máxima del leaderboard = TTL de caché. Justificar valor._
 | Punto de contención | Síntoma | Mitigación | ¿Implementado? |
 |---|---|---|---|
 | Usuario con muchas escrituras (fila/bucket caliente) | Contención de locks, latencia de escritura | Prototipo: escritores serializados en proceso (sin lock thrashing). Producción: micro-batching que fusiona incrementos del mismo `(user, bucket)`; counter sharding | Parcial (semáforo de escritura; probado con 1.000 escrituras a un solo usuario) |
-| Lectura del top-N global | Recalcular el mismo resultado miles de veces | Caché con TTL corto + protección contra estampida (`HybridCache`) | _TBD_ |
-| Sorted set global único (producción, Redis) | Un shard saturado | Particionar por hash de `user_id` en K sets; top-N global = merge de top-N por shard (exacto) | No (diseño) |
-| Bucket temporal actual | Todas las escrituras en el mismo rango | Clave `(user_id, bucket)`; repartir por usuario, no por tiempo | _TBD_ |
+| Lectura del top-N global | Recalcular el mismo resultado miles de veces; estampida cuando expira la caché | `HybridCache` con TTL de 1 s y la ventana en la clave; los misses concurrentes se coalescen en una sola consulta ([ADR-004](docs/ADR/004-cache-del-leaderboard.md)) | **Sí** (50 peticiones concurrentes → 1 consulta) |
+| Sorted set global único (producción, Redis) | Un shard saturado | Particionar por hash de `user_id` en K sets; top-N global = merge de top-N por shard. Es exacto porque el orden es total (`Ranking`) | No (diseño) |
+| Bucket temporal actual | Todas las escrituras caen en el mismo rango de tiempo | Clave primaria `(user_id, bucket_start)`: la contención se reparte por usuario, nunca por tiempo | **Sí** (esquema) |
+| Rate limiting por cliente | Un cliente ruidoso satura al resto | Token bucket por API key (o por IP sin key) | **Sí** |
 
 ---
 
@@ -225,14 +228,24 @@ _TBD_
 
 <!-- GUÍA: auth, validación, rate limits, secretos, contenedor, modelo de amenazas. -->
 
-- **Autenticación:** _TBD_
-- **Autorización:** _TBD (p. ej. clave de ingestor vs. clave de lectura)_
-- **Validación de entrada:** _TBD_
-- **Rate limiting:** _TBD_
-- **Límites de payload:** _TBD_
-- **Secretos:** _TBD_
-- **Contenedor:** _TBD (no-root, imagen mínima)_
-- **Modelo de amenazas:** _TBD (fabricación de scores, enumeración de usuarios, DoS)_
+- **Autenticación:** header `X-Api-Key`, comparado en tiempo constante sobre digests SHA-256 (no revela por tiempo ni el contenido ni la longitud de la key). **Falla cerrada:** sin keys configuradas, todo responde `401`. Las keys de `appsettings.Development.json` son solo de desarrollo; en otros entornos se inyectan por variable de entorno o gestor de secretos.
+- **Autorización:** roles por key: `scores:write` (ingestores, server-to-server) y `scores:read` (lectores). Una key de solo lectura no puede escribir (`403`). Evidencia: `SecurityTests`.
+- **Validación de entrada:** en el dominio, con todos los errores reportados a la vez: `user_id` con charset y longitud acotados (evita inyección y cardinalidad sin límite), puntos enteros con tope, `timestamp` sin futuro más allá del skew e `Idempotency-Key` ASCII imprimible de hasta 128 caracteres. JSON mal formado → `400` problem+json.
+- **Rate limiting:** token bucket por API key (por IP si no hay key), con `500 req/s` sostenidos y ráfagas de `1000` (configurable). Responde `429` con `Retry-After`. Va después de la autenticación para particionar por cliente.
+- **Límites de payload:** `MaxRequestBodySize = 16 KB` en Kestrel (el payload real pesa menos de 200 B).
+- **Errores:** RFC 9457 con `trace_id`; nunca se exponen stack traces ni detalles internos.
+- **Secretos:** fuera del repositorio en todos los entornos salvo Development. En producción: gestor de secretos (Key Vault o Secrets Manager) con rotación. Las keys deberían guardarse hasheadas.
+- **Contenedor:** imagen chiseled (sin shell ni gestor de paquetes) y usuario no-root por defecto.
+- **Modelo de amenazas:**
+
+| Amenaza | Mitigación |
+|---|---|
+| Fabricación de puntuaciones por clientes finales | Solo ingestores server-to-server con rol `scores:write`. Producción: firmar eventos en el servidor del juego (HMAC) y aplicar reglas anti-cheat aguas arriba |
+| Inflar la ventana con timestamps futuros | Rechazo más allá de `FutureSkewTolerance` |
+| Repetición (replay) de peticiones | Idempotencia por `event_id` |
+| Fuerza bruta o enumeración de keys | Comparación en tiempo constante + rate limit por IP para peticiones sin key |
+| DoS por payloads grandes o `top` enorme | Límite de body (16 KB) y `MaxTop` = 100 |
+| Exposición de `/metrics` | Pública en el prototipo; en producción, solo red interna o protegida |
 
 ---
 
@@ -242,14 +255,28 @@ _TBD_
 
 | Señal | Detalle |
 |---|---|
-| Métricas | _TBD_ |
-| Logs | _TBD_ |
-| Trazas | _TBD_ |
-| Health checks | _TBD_ |
+| Métricas | OpenTelemetry → Prometheus en `/metrics`. HTTP (RED) automáticas: `http_server_request_duration_seconds` por ruta y código. De negocio: `leaderboard_scores_ingested_total{outcome=created\|duplicate\|rejected}` |
+| Logs | JSON estructurado en consola (fuera de Development) con scopes (`TraceId`, `SpanId`), listo para Loki o ELK |
+| Trazas | OpenTelemetry con instrumentación ASP.NET Core; se exportan por OTLP si se configura `Telemetry:OtlpEndpoint` (Jaeger, Tempo, etc.) |
+| Correlación | Header `X-Correlation-Id` (= trace id) en todas las respuestas; `trace_id` en cada problem+json |
+| Health checks | `/health/live` (proceso vivo, sin dependencias) y `/health/ready` (SQLite accesible y esquema creado). Separarlos evita reinicios en cascada cuando falla una dependencia |
 
-**SLOs propuestos:** _TBD_
+**SLOs propuestos:**
 
-**Alertas:** _TBD_
+| SLI | Objetivo |
+|---|---|
+| Disponibilidad de `POST /score` (respuestas no-5xx) | 99,9 % mensual |
+| Latencia p99 de `POST /score` | < 50 ms |
+| Latencia p99 de `GET /leaderboard` | < 20 ms (servido de caché) |
+| Frescura del leaderboard | < 2 s (TTL de 1 s + margen) |
+
+**Alertas** (burn rate sobre los SLOs, no sobre síntomas aislados):
+
+- La tasa de 5xx consume el presupuesto de error más de 14× más rápido de lo normal en 1 h (página) o más de 6× en 6 h (ticket).
+- p99 de `POST /score` > 50 ms durante 10 min.
+- `rate(leaderboard_scores_ingested_total{outcome="rejected"})` / total > 5 %: probable integración rota en un cliente.
+- `outcome="duplicate"` anómalamente alto: un cliente está reintentando en bucle.
+- `/health/ready` falla en más del 50 % de las réplicas.
 
 ---
 
