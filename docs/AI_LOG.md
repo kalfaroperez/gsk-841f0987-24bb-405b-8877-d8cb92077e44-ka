@@ -144,6 +144,15 @@
   - Verificó en tres escenarios: SDK 10 + runtime 10 (Windows, por roll-forward), SDK 9.0.319 + runtime 9.0.21 reales (contenedor `sdk:9.0`, Linux) e imagen de despliegue sobre ASP.NET Core 9.0.21. En los tres pasaron los 128 tests o la prueba de humo.
 - **Qué acepté / modifiqué / rechacé:** _TBD_
 
+## Entrada 12: Corrección del tiempo empleado
+
+- **Fecha / fase:** 2026-10-15 · Cierre
+- **Modelo / herramienta:** Claude Opus 5.5 · Claude Code
+- **Prompt (literal):**
+  > Actualiza el tiempo ya que necesité ya que fueron alrededor de 6 horas y media para hacer test y analisis de casos de uso. Validacion de Concurrencia. Documentacion y revisión del uso de la IA para la implementacion de este proyecto. Todo el proyecto fue evaluado via IA.
+- **Respuesta (resumen):** Reemplazó el total de 2 h (entrada 10) por ~6 h 30 min en README y SOLUTION §16. Retiró el desglose estimado desde commits, porque solo reflejaba la generación de código, y lo cambió por la lista de actividades. Explicó en §16 por qué se superaron en ~30 min las 6 h recomendadas, como pide el enunciado, y dejó explícito que todo el proyecto se desarrolló con IA y se revisó en cada fase.
+- **Qué acepté / modifiqué / rechacé:** _TBD_
+
 ---
 
 ## Plantilla de entrada

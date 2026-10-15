@@ -465,4 +465,13 @@ Los planes de recuperación que no se ensayan no funcionan. Se propone restaurar
 
 ## 16. Tiempo empleado
 
-**2 horas en total**, dentro de las 6 h recomendadas. El desglose aproximado por fase está en el [README](README.md#tiempo-empleado). El uso de un agente de IA con acceso a la terminal (compilar, probar, levantar Docker y medir sin cambiar de contexto) explica buena parte de la diferencia con el tiempo recomendado. El costo de esa velocidad se pagó con verificación: tests en cada fase, experimentos para confirmar afirmaciones y revisión de cada commit.
+**Alrededor de 6 h 30 min en total: unos 30 minutos más de las 6 h recomendadas.** Las actividades están listadas en el [README](README.md#tiempo-empleado).
+
+**Por qué se excedió.** Generar el código con asistencia de IA fue la parte más rápida. La mayor parte del tiempo se dedicó a lo que no conviene delegar:
+
+- **Tests y análisis de casos de uso:** bordes de la ventana, idempotencia, validaciones, contratos de error.
+- **Validación de concurrencia:** escrituras paralelas al mismo usuario, tormentas de reintentos, lectores concurrentes, y el experimento que confirmó que la exactitud depende de la transacción y no del semáforo.
+- **Documentación**, incluidas las mediciones reales de §9 y los cálculos de §8.
+- **Revisión del uso de la IA:** todo el proyecto se construyó con IA, y cada propuesta se evaluó antes de aceptarla. Eso llevó a corregir varios errores (listados en §15) y a retirar afirmaciones que no estaban medidas.
+
+Se priorizó entregar una solución verificada antes que ajustarse exactamente al tiempo recomendado.

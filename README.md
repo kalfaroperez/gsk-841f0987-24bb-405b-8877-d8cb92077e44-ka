@@ -10,18 +10,17 @@ Servicio HTTP en .NET que mantiene un leaderboard global de puntuaciones, agrega
 
 ## Tiempo empleado
 
-**Total: 2 horas**, dentro de las 6 h recomendadas.
+**Total: alrededor de 6 h 30 min**, unos 30 minutos más de las 6 h recomendadas (el motivo está en [SOLUTION.md §16](SOLUTION.md#16-tiempo-empleado)).
 
-El desglose es aproximado: la planificación es el tiempo previo al primer commit y el resto sale del historial de commits. Los tests se escribieron con TDD dentro de cada fase y la documentación se fue actualizando en cada fase, así que no aparecen como bloques separados.
+El tiempo cubre todo el ciclo, no solo escribir código:
 
-| Fase | Tiempo aprox. |
-|---|---|
-| Análisis del enunciado, plan de trabajo y diseño de la solución | 40 min |
-| Domain, Application y persistencia SQLite (con sus tests) | 25 min |
-| API: endpoints, seguridad, caché y observabilidad (con tests HTTP) | 35 min |
-| Tests E2E de carga, medición de latencias y verificación con Docker | 15 min |
-| Documentación final (escalado, despliegue, recuperación) y cierre | 5 min |
-| **Total** | **2 h** |
+- Análisis del enunciado, plan de trabajo y diseño de la solución.
+- Implementación por fases con TDD (Domain → Application + SQLite → API → E2E + Docker).
+- **Tests y análisis de los casos de uso:** escenarios borde de la ventana, idempotencia, validaciones y códigos de error.
+- **Validación de concurrencia:** tests con escrituras paralelas al mismo usuario, reintentos idénticos y lectores concurrentes, más el experimento de quitar el semáforo para confirmar de dónde viene la exactitud.
+- Pruebas E2E de carga, medición de latencias y verificación del despliegue con Docker (incluida la compatibilidad con .NET 9).
+- **Documentación** (README, SOLUTION, ARCHITECTURE, ADRs, instructivo de ejecución).
+- **Revisión del uso de la IA:** todo el proyecto se desarrolló con asistencia de IA, y cada fase (código, tests, decisiones y documentación) se evaluó y revisó antes de integrarla. Detalle en [SOLUTION.md §15](SOLUTION.md#15-uso-de-ia) y [docs/AI_LOG.md](docs/AI_LOG.md).
 
 ---
 
@@ -238,7 +237,7 @@ deploy/
 
 ## Uso de IA
 
-**¿Utilizaste IA?** Sí
+**¿Utilizaste IA?** Sí. Todo el proyecto se desarrolló con asistencia de IA y se evaluó y revisó en cada fase (ver [SOLUTION.md §15](SOLUTION.md#15-uso-de-ia)).
 
 **¿Cuáles modelos?**
 - Claude Sonnet 5.5 (Anthropic): análisis inicial del enunciado y plan de trabajo
