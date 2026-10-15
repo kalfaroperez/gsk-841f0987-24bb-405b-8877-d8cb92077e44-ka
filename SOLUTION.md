@@ -1,13 +1,5 @@
 # SOLUTION: Leaderboard Service
 
-<!--
-GUÍA GENERAL
-- README = "cómo lo ejecuto". SOLUTION = "por qué está hecho así, qué garantiza y cómo crece".
-- Cada afirmación necesita evidencia: un test, una métrica o un cálculo.
-- Llenar sección por sección al cerrar cada fase; no dejarlo para el final.
-- Borrar los comentarios GUÍA antes de entregar.
--->
-
 ## 1. Resumen ejecutivo
 
 Servicio .NET 10 de leaderboard global con **arquitectura hexagonal ligera**: un dominio puro (ventana, buckets, idempotencia, ranking) separado de la persistencia mediante puertos. La agregación por ventana es **incremental por buckets de tiempo alineados**: cada lectura cuesta como máximo `Window / BucketSize` buckets por usuario, sin importar el volumen de eventos.
@@ -23,8 +15,6 @@ La evidencia son **128 tests automatizados** (84 unitarios, 39 de integración y
 ---
 
 ## 2. Supuestos y ambigüedades resueltas
-
-<!-- GUÍA: el evaluador busca que hayas visto las ambigüedades del enunciado. Una fila por decisión. -->
 
 | # | Ambigüedad | Decisión | Razón | Alternativa descartada |
 |---|---|---|---|---|
@@ -42,8 +32,6 @@ La evidencia son **128 tests automatizados** (84 unitarios, 39 de integración y
 
 ## 3. Arquitectura
 
-<!-- GUÍA: resumen + diagrama principal. El detalle (flujos) va en docs/ARCHITECTURE.md. -->
-
 Arquitectura hexagonal ligera en 4 proyectos. Regla de dependencias: `Api → Application → Domain`, `Infrastructure → Application`. Domain no depende de nada.
 
 ```mermaid
@@ -60,8 +48,6 @@ Detalle de componentes y flujos: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 ---
 
 ## 4. Modelo de datos y lógica de agregación
-
-<!-- GUÍA: tablas, bucketización, por qué sumar buckets y no eventos. Incluir un ejemplo numérico. -->
 
 ### Tablas
 
@@ -105,8 +91,6 @@ Resultado: `alice = 25`, `bob = 7` (histórico de alice = 125).
 
 ## 5. Consistencia y garantías
 
-<!-- GUÍA: sección clave para un perfil senior. Ser explícito en lo que SÍ y lo que NO se garantiza, con evidencia. -->
-
 ### Se garantiza
 
 | Garantía | Mecanismo | Evidencia (test) |
@@ -141,8 +125,6 @@ Resultado: `alice = 25`, `bob = 7` (histórico de alice = 125).
 
 ## 6. Hot keys: puntos de contención
 
-<!-- GUÍA: identificar los 4 puntos; implementar al menos uno y documentar el resto. -->
-
 | Punto de contención | Síntoma | Mitigación | ¿Implementado? |
 |---|---|---|---|
 | Usuario con muchas escrituras (fila/bucket caliente) | Contención de locks, latencia de escritura | Prototipo: escritores serializados en proceso (sin lock thrashing). Producción: micro-batching que fusiona incrementos del mismo `(user, bucket)`; counter sharding | Parcial (semáforo de escritura; probado con 1.000 escrituras a un solo usuario) |
@@ -154,8 +136,6 @@ Resultado: `alice = 25`, `bob = 7` (histórico de alice = 125).
 ---
 
 ## 7. Trade-offs
-
-<!-- GUÍA: formato "elegí X, cedí Y, a cambio de Z". -->
 
 | Decisión | Elegí | Cedí | A cambio de |
 |---|---|---|---|
@@ -310,8 +290,6 @@ En todas las ejecuciones la correctitud fue total: los 501 totales por usuario c
 
 ## 10. Seguridad
 
-<!-- GUÍA: auth, validación, rate limits, secretos, contenedor, modelo de amenazas. -->
-
 - **Autenticación:** header `X-Api-Key`, comparado en tiempo constante sobre digests SHA-256 (no revela por tiempo ni el contenido ni la longitud de la key). **Falla cerrada:** sin keys configuradas, todo responde `401`. Las keys de `appsettings.Development.json` son solo de desarrollo; en otros entornos se inyectan por variable de entorno o gestor de secretos.
 - **Autorización:** roles por key: `scores:write` (ingestores, server-to-server) y `scores:read` (lectores). Una key de solo lectura no puede escribir (`403`). Evidencia: `SecurityTests`.
 - **Validación de entrada:** en el dominio, con todos los errores reportados a la vez: `user_id` con charset y longitud acotados (evita inyección y cardinalidad sin límite), puntos enteros con tope, `timestamp` sin futuro más allá del skew e `Idempotency-Key` ASCII imprimible de hasta 128 caracteres. JSON mal formado → `400` problem+json.
@@ -334,8 +312,6 @@ En todas las ejecuciones la correctitud fue total: los 501 totales por usuario c
 ---
 
 ## 11. Observabilidad
-
-<!-- GUÍA: métricas, logs, trazas, SLOs y alertas. -->
 
 | Señal | Detalle |
 |---|---|
@@ -461,12 +437,32 @@ Los planes de recuperación que no se ensayan no funcionan. Se propone restaurar
 
 ## 15. Uso de IA
 
-<!-- GUÍA: dónde ayudó, dónde se corrigió/rechazó, qué decisiones son propias. -->
+**Herramientas:** Claude Code (Claude Sonnet 5.5 para el análisis inicial y Claude Opus 5.5 para el resto) como agente con acceso a la terminal local, más Visual Studio 2022 y VS Code para revisar el código. Bitácora completa con prompts literales: [docs/AI_LOG.md](docs/AI_LOG.md).
 
-_TBD_. Bitácora completa: [docs/AI_LOG.md](docs/AI_LOG.md)
+**Cómo se trabajó.** La IA se usó como par de programación, no como generador ciego. El trabajo avanzó en fases cortas (esqueleto → Domain → Application + SQLite → API → E2E + Docker → documentación); cada fase terminó con compilación limpia, tests en verde y un commit revisado antes de continuar. El código se escribió con TDD: primero los tests en rojo (se verificaba que fallaran) y luego la implementación.
+
+**Verificación en lugar de confianza.** Varias afirmaciones se comprobaron con experimentos antes de documentarlas, y algunas se corrigieron:
+
+| Situación | Qué se hizo |
+|---|---|
+| ¿La exactitud concurrente depende del semáforo de escritura? | Se quitó el semáforo y se corrieron los tests de concurrencia: siguieron pasando. La documentación atribuye la exactitud a la transacción `IMMEDIATE`, no al semáforo |
+| Afirmación "~2–3× de throughput" de `synchronous=NORMAL` | No estaba medida: se retiró y quedó como "pendiente de medir" |
+| Latencia de escritura alta con 64 clientes | Se midió también con concurrencia 1 para separar el costo del servicio (p50 5.6 ms) del de la cola (ley de Little) |
+| p99 de ~10 s en Docker Desktop | Se documentó tal cual, con su causa y la mejora concreta (group commit), en lugar de ajustar el test para que se viera mejor |
+
+**Errores de la IA detectados y corregidos durante el proceso:**
+
+- ADRs generados con la codificación corrupta (PowerShell 5.1 leyó UTF-8 como ANSI); detectado al revisarlos y regenerados.
+- Tests escritos con una API de xUnit v3 (`TestContext.Current`) en un proyecto con xUnit 2.9.
+- Inicializadores de campo que referenciaban otros campos (CS0236).
+- Un test de rate limit que dependía del tiempo (potencialmente inestable); se rediseñó para no depender del reloj.
+- Un `.gitattributes` con sintaxis de llaves que git no soporta.
+- Un nodo de Mermaid con la sintaxis de paralelogramo usada por error.
+
+**Decisiones de diseño explícitas** (propuestas con alternativas, validadas antes de implementarse y registradas en ADRs): SQLite + Dapper en lugar de EF Core, idempotencia opcional con hash de respaldo, `404` frente a `0` para usuarios inexistentes, configuración perezosa para poder probarla, `generated_at` honesto con caché, y `202 Accepted` con deduplicación asíncrona en el diseño de producción.
 
 ---
 
 ## 16. Tiempo empleado
 
-_TBD (igual al del README; indicar si se excedieron las 6 h recomendadas y por qué)._
+**2 horas en total**, dentro de las 6 h recomendadas. El desglose aproximado por fase está en el [README](README.md#tiempo-empleado). El uso de un agente de IA con acceso a la terminal (compilar, probar, levantar Docker y medir sin cambiar de contexto) explica buena parte de la diferencia con el tiempo recomendado. El costo de esa velocidad se pagó con verificación: tests en cada fase, experimentos para confirmar afirmaciones y revisión de cada commit.

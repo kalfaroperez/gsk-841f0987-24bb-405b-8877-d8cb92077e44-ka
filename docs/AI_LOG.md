@@ -1,18 +1,12 @@
 # Bitácora de uso de IA
 
-<!--
-GUÍA
-- Registrar cada interacción relevante MIENTRAS se trabaja, no al final.
-- La columna "Qué acepté / modifiqué / rechacé" es la más importante: demuestra criterio propio.
-- Los prompts pueden ser literales o un resumen fiel; las respuestas, resumidas.
--->
-
 ## Resumen
 
 | Modelo | Herramienta | Uso principal |
 |---|---|---|
 | Claude Sonnet 5.5 | Claude Code (desktop) | Análisis del enunciado, plan de trabajo |
-| Claude Opus 5.5 | Claude Code (desktop) | Organización de la solución .NET, plantillas de documentación, esqueleto del repo |
+| Claude Opus 5.5 | Claude Code (desktop) | Diseño de la solución .NET, implementación con TDD, tests (unitarios, integración, E2E), Docker, mediciones y documentación |
+| — | Visual Studio 2022, VS Code | Revisión y navegación del código y la documentación (sin asistentes de IA adicionales) |
 
 ---
 
@@ -119,6 +113,18 @@ GUÍA
 - **Aclaraciones relevantes:**
   - Se decidió y justificó un cambio de contrato para producción (`202 Accepted` con deduplicación asíncrona), porque deduplicar de forma síncrona antes del log tiene un modo de falla que pierde eventos.
   - Los números de capacidad son supuestos conservadores declarados, no mediciones. Las mediciones reales del prototipo están en §9.
+- **Qué acepté / modifiqué / rechacé:** _TBD_
+
+## Entrada 10: Cierre de README y SOLUTION
+
+- **Fecha / fase:** 2026-10-15 · Cierre
+- **Modelo / herramienta:** Claude Opus 5.5 · Claude Code
+- **Prompts (literales):**
+  > Te paso el tiempo empleado y el IDE para completar README, SOLUTION §15-16 y quitar los comentarios GUÍA
+
+  > 2 horas y IDE Visual Studio 2022 y VS Code
+- **Respuesta (resumen):** Completó el tiempo empleado (total declarado por mí; el desglose por fase es aproximado, estimado desde el historial de commits), la sección de IA del README, SOLUTION §15 (cómo se usó y verificó la IA y qué errores se corrigieron) y §16, y eliminó los comentarios de guía de toda la documentación.
+- **Aclaraciones relevantes:** la IA no estimó por su cuenta el tiempo total; pidió el dato real y usó el historial de commits solo para el desglose.
 - **Qué acepté / modifiqué / rechacé:** _TBD_
 
 ---

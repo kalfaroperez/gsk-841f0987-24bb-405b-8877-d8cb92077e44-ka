@@ -1,6 +1,5 @@
 # Leaderboard Service
 
-<!-- GUÍA: 2–3 líneas. Qué es el servicio y qué resuelve. -->
 Servicio HTTP en .NET que mantiene un leaderboard global de puntuaciones, agregadas por usuario sobre una ventana de tiempo configurable, con actualización near-real-time e ingesta concurrente segura.
 
 > Razonamiento, decisiones y escalado: [SOLUTION.md](SOLUTION.md) · Arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
@@ -9,15 +8,18 @@ Servicio HTTP en .NET que mantiene un leaderboard global de puntuaciones, agrega
 
 ## Tiempo empleado
 
-<!-- GUÍA (OBLIGATORIO): total real + desglose. Si superaste 6 h, dilo y remite a SOLUTION.md. -->
+**Total: 2 horas**, dentro de las 6 h recomendadas.
 
-| Fase | Tiempo |
+El desglose es aproximado: la planificación es el tiempo previo al primer commit y el resto sale del historial de commits. Los tests se escribieron con TDD dentro de cada fase y la documentación se fue actualizando en cada fase, así que no aparecen como bloques separados.
+
+| Fase | Tiempo aprox. |
 |---|---|
-| Diseño y decisiones | _TBD_ |
-| Implementación | _TBD_ |
-| Tests | _TBD_ |
-| Documentación | _TBD_ |
-| **Total** | **_TBD_** |
+| Análisis del enunciado, plan de trabajo y diseño de la solución | 40 min |
+| Domain, Application y persistencia SQLite (con sus tests) | 25 min |
+| API: endpoints, seguridad, caché y observabilidad (con tests HTTP) | 35 min |
+| Tests E2E de carga, medición de latencias y verificación con Docker | 15 min |
+| Documentación final (escalado, despliegue, recuperación) y cierre | 5 min |
+| **Total** | **2 h** |
 
 ---
 
@@ -234,23 +236,22 @@ deploy/
 
 ## Uso de IA
 
-<!-- GUÍA (OBLIGATORIO): responder las 5 preguntas del enunciado. Detalle completo en docs/AI_LOG.md. -->
-
 **¿Utilizaste IA?** Sí
 
 **¿Cuáles modelos?**
-- Claude Opus 5.5 (Anthropic)
-- Claude Sonnet 5.5 (Anthropic)
-- _TBD: agregar otros si se usan_
+- Claude Sonnet 5.5 (Anthropic): análisis inicial del enunciado y plan de trabajo
+- Claude Opus 5.5 (Anthropic): diseño de la solución .NET, implementación, tests y documentación
 
 **¿Cuáles herramientas?**
-- Claude Code (app de escritorio, pestaña Code)
-- _TBD: IDE (Visual Studio / Rider / VS Code)_
+- Claude Code (app de escritorio de Claude, pestaña Code) como agente: ejecutó builds, tests, Docker y git en la máquina local
+- Visual Studio 2022 y VS Code para revisar y navegar el código y la documentación
 
 **¿Para qué?**
-- Análisis del enunciado y plan de trabajo
-- Propuesta de organización de la solución .NET y plantillas de documentación
-- Generación del esqueleto del repositorio
-- _TBD: generación de código / tests / revisión / refactor_
+- Análisis crítico del enunciado: ambigüedades y qué se evalúa realmente
+- Plan de trabajo por fases y organización de la solución (arquitectura hexagonal ligera en .NET 10)
+- Generación de código con TDD: primero tests en rojo, luego implementación hasta verde, en cada capa
+- Generación de tests unitarios, de integración (incluida concurrencia real sobre SQLite) y E2E de carga
+- Ejecución y verificación: builds con analizadores estrictos, pruebas de humo con `curl`, despliegue y E2E contra Docker, medición de latencias
+- Redacción de la documentación (README, SOLUTION, ARCHITECTURE, ADRs) a partir de las decisiones y mediciones
 
-**Prompts, respuestas y aclaraciones relevantes:** ver [docs/AI_LOG.md](docs/AI_LOG.md)
+**Prompts, respuestas y aclaraciones relevantes:** cada prompt literal, el resumen de la respuesta y las correcciones hechas durante el proceso están en [docs/AI_LOG.md](docs/AI_LOG.md). El análisis de cómo se usó y se verificó la IA está en [SOLUTION.md §15](SOLUTION.md#15-uso-de-ia).
