@@ -22,13 +22,14 @@ _TBD_
 
 | # | Ambigüedad | Decisión | Razón | Alternativa descartada |
 |---|---|---|---|---|
-| 1 | El payload no trae id de evento → reintentos duplican score | `Idempotency-Key` opcional; si falta, hash SHA-256 de `(user_id, score, timestamp)` | _TBD_ | _TBD_ |
-| 2 | `timestamp`: ¿tiempo de evento o de ingesta? | Tiempo de evento para la ventana | _TBD_ | _TBD_ |
-| 3 | Eventos futuros / tardíos | Futuro > skew → rechazo; tardío → se persiste, no suma si cae fuera de ventana | _TBD_ | _TBD_ |
+| 1 | El payload no trae id de evento → reintentos duplican score | `Idempotency-Key` opcional; si falta, hash SHA-256 de `(user_id, score, timestamp UTC)`. Prefijos `k:`/`h:` separan ambos espacios ([ADR-002](docs/ADR/002-idempotencia-de-escritura.md)) | Exactamente-una-vez sin romper el contrato del enunciado | Key obligatoria (rompe contrato); sin idempotencia (duplica) |
+| 2 | `timestamp`: ¿tiempo de evento o de ingesta? | Tiempo de evento, normalizado a UTC | El ranking refleja cuándo ocurrió la jugada, no cuándo llegó; los reintentos tardíos no cambian de bucket | Tiempo de ingesta (sesgado por colas y reintentos) |
+| 3 | Eventos futuros / tardíos | Futuro > `FutureSkewTolerance` (5 min) → rechazo; tardío → se acepta y va a su bucket histórico | Tolera relojes desincronizados sin permitir inflar la ventana futura; lo tardío no se pierde del histórico | Rechazar tardíos (pierde datos legítimos) |
 | 4 | `GET /user/:id/score`: ¿ventana o histórico? | Ambos en la respuesta | _TBD_ | _TBD_ |
 | 5 | Usuario inexistente | _TBD: 404 o 200 con 0_ | _TBD_ | _TBD_ |
-| 6 | Tipo de `score` | Entero `long`; negativos: _TBD_ | Evitar errores de float | `double` |
-| 7 | Empates en el ranking | score desc, `user_id` asc (ordinal) | Determinismo y tests estables | _TBD_ |
+| 6 | Tipo de `score` | Entero `long` en `[0, MaxPointsPerEvent]` (1.000.000 por defecto); sin negativos; sumas con `checked` | Sin errores de redondeo; el tope limita el abuso y hace imposible el overflow práctico; penalizaciones quedan fuera de alcance | `double`; permitir negativos |
+| 7 | Empates en el ranking | score desc, `user_id` asc (ordinal); rank = posición | Orden total → determinismo, tests estables y merge exacto de top-N entre shards | Rank denso con empates compartidos (complica paginación y merge) |
+| 7b | Formato de `user_id` | 1–64 caracteres `[A-Za-z0-9_.-]`, sensible a mayúsculas | Seguro en claves, logs y URLs sin escape; acota la memoria por clave | Texto libre (riesgo de inyección y cardinalidad sin límite) |
 | 8 | Límite de `top` | Default _TBD_, máximo _TBD_ | Proteger el servicio | Sin límite |
 
 ---
@@ -66,11 +67,27 @@ Detalle de componentes y flujos: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ### Agregación por ventana
 
-_TBD: explicar cálculo de rango de buckets, costo acotado (p. ej. 7 días × 1 min = 10.080 buckets máx. por usuario) y precisión en los bordes._
+Detalle y alternativas: [ADR-003](docs/ADR/003-agregacion-por-buckets-temporales.md).
+
+- Cada evento suma sus puntos al bucket `(user_id, floor(timestamp_utc, BucketSize))`.
+- La ventana es `[Start, End)` alineada a buckets: `End` = fin del bucket actual y `Start = End − Window`. Siempre incluye el instante actual y cubre exactamente `Window / BucketSize` buckets.
+- **Costo acotado:** 7 días con buckets de 1 minuto son como máximo 10.080 buckets por usuario, sin importar cuántos eventos haya.
+- **Precisión:** el borde antiguo avanza en saltos de `BucketSize` (1 min). Es aceptable para un ranking semanal.
+- `WindowAggregation.Totals` (dominio) es la especificación ejecutable; el adaptador SQL debe producir el mismo resultado.
+- **Top-N:** heap acotado de tamaño N (`PriorityQueue`), O(U log N) en tiempo y O(N) en memoria para U usuarios, en lugar de ordenar todos.
 
 ### Ejemplo
 
-_TBD_
+Configuración por defecto (ventana de 7 días, bucket de 1 min), `now = 2026-10-15T12:00:30Z`:
+
+| Evento (`timestamp`) | Bucket | ¿En ventana `[2026-10-08T12:01Z, 2026-10-15T12:01Z)`? |
+|---|---|---|
+| alice +10 @ `2026-10-15T12:00:10Z` | `12:00` | Sí |
+| alice +15 @ `2026-10-14T08:00:00Z` | `08:00` | Sí |
+| alice +100 @ `2026-10-08T12:00:59Z` | `2026-10-08T12:00` | No (un minuto antes de `Start`) |
+| bob +7 @ `2026-10-10T00:00:00Z` | `00:00` | Sí |
+
+Resultado: `alice = 25`, `bob = 7` (histórico de alice = 125).
 
 ---
 

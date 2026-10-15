@@ -1,15 +1,15 @@
-# ADR-NNN: TÃ­tulo
+# ADR-001: Persistencia del prototipo con SQLite en modo WAL
 
 - **Estado:** Propuesto
 - **Fecha:** 2026-10-15
 
 ## Contexto
 
-<!-- QuÃ© problema o fuerza obliga a decidir. -->
+<!-- Qué problema o fuerza obliga a decidir. -->
 
-## DecisiÃ³n
+## Decisión
 
-<!-- QuÃ© se decidiÃ³, en una o dos frases. -->
+<!-- Qué se decidió, en una o dos frases. -->
 
 ## Alternativas consideradas
 
@@ -19,4 +19,4 @@
 
 ## Consecuencias
 
-<!-- Positivas, negativas y quÃ© habrÃ­a que hacer si cambia el contexto. -->
+<!-- Positivas, negativas y qué habría que hacer si cambia el contexto. -->
