@@ -213,14 +213,42 @@ _TBD_
 
 ## 9. Latencia y throughput
 
-<!-- GUÍA: medido en local (aunque sea con el test E2E) + proyección en producción. -->
+Medido con `tests/Leaderboard.E2ETests` (cliente HTTP real, latencia vista por el cliente) el 2026-10-15, en un portátil con Windows 11, sobre .NET 10 en Release dentro del contenedor y Debug en el proceso local. Son números de un prototipo en una sola máquina, útiles para entender el comportamiento, **no** un benchmark de capacidad.
 
-| Métrica | Local (medido) | Producción (proyectado) |
+**Proceso local (Windows, SSD, Kestrel directo):**
+
+| Escenario | Concurrencia | Throughput | p50 | p95 | p99 | 5xx |
+|---|---|---|---|---|---|---|
+| `POST /score` (30 % hot user, 5 % reintentos) | 64 | 389 req/s | 124.8 ms | 301.4 ms | 864.9 ms | 0 |
+| `POST /score` (mismo escenario) | 1 | 67 req/s | 5.6 ms | 64.7 ms | 177.1 ms | 0 |
+| `POST /score` concurrente con lecturas | 32 | 334 req/s | 67.3 ms | 177.6 ms | 412.2 ms | 0 |
+| `GET /leaderboard?top=10` durante escrituras | 8 lectores | 20.563 req/s | 0.3 ms | 0.5 ms | 1.3 ms | 0 |
+| `GET /user/{id}/score` | 64 | 16.112 req/s | 0.8 ms | 13.3 ms | 16.6 ms | 0 |
+
+**Contenedor Docker (Docker Desktop, volumen en el disco virtual de WSL2):**
+
+| Escenario | Concurrencia | Throughput | p50 | p95 | p99 | 5xx |
+|---|---|---|---|---|---|---|
+| `POST /score` (30 % hot user, 5 % reintentos) | 64 | 120 req/s | 237.4 ms | 1479.6 ms | 9998.2 ms | 0 |
+| `POST /score` concurrente con lecturas | 32 | 113 req/s | 163.6 ms | 939.4 ms | 3218.1 ms | 0 |
+| `GET /leaderboard?top=10` durante escrituras | 8 lectores | 7.385 req/s | 0.9 ms | 1.6 ms | 2.7 ms | 0 |
+| `GET /user/{id}/score` | 64 | 3.942 req/s | 1.7 ms | 79.1 ms | 90.3 ms | 0 |
+
+En todas las ejecuciones la correctitud fue total: los 501 totales por usuario coincidieron exactamente con lo esperado, los 200 reintentos idénticos sumaron una sola vez, y los lectores nunca vieron un leaderboard mal formado.
+
+**Interpretación:**
+
+- **El cuello de botella es el `fsync` por commit con un único escritor.** El servicio en sí es rápido: con concurrencia 1, el p50 es 5.6 ms incluyendo el `fsync`. Con 64 clientes, la latencia es casi toda cola, como predice la ley de Little: 64 / 389 req/s ≈ 165 ms de espera media frente al p50 medido de 125 ms. El throughput sube con la concurrencia (67 → 389 req/s) porque se solapan el procesamiento HTTP y la espera del lock.
+- **En Docker Desktop**, el `fsync` sobre el disco virtual de WSL2 es varias veces más caro (~120 commits/s). Con 64 clientes, la cola llega a un p99 de ~10 s. La cola de latencias del disco (`fsync` lentos esporádicos) se amplifica porque todos los escritores esperan detrás del mismo lock.
+- **Las lecturas no compiten con las escrituras:** gracias a WAL y a la caché, `GET /leaderboard` sostiene más de 20k req/s con p99 de 1.3 ms mientras se escribe.
+- **Mejora concreta de mayor impacto, aún no implementada:** *group commit*. Agrupar en una sola transacción y un solo `fsync` los eventos que llegan durante 1–5 ms (micro-batching con `Channel<T>`, respondiendo a cada cliente después del commit de su lote) multiplicaría el throughput de escritura por el tamaño del lote, sin debilitar la garantía de durabilidad. Es la misma idea que el diseño de producción (§8) aplica con un log y agregadores.
+
+| Métrica | Prototipo (medido, proceso local) | Producción (proyectado, §8) |
 |---|---|---|
-| p50 `POST /score` | _TBD_ | _TBD_ |
-| p99 `POST /score` | _TBD_ | _TBD_ |
-| p99 `GET /leaderboard` | _TBD_ | _TBD_ |
-| Throughput de escritura | _TBD_ | 100k req/s |
+| p50 `POST /score` | 5.6 ms sin cola / 125 ms con 64 clientes | < 10 ms (ack tras escribir en el log replicado) |
+| p99 `POST /score` | 865 ms con 64 clientes | < 50 ms |
+| p99 `GET /leaderboard` | 1.3 ms | < 5 ms (caché en proceso + L2) |
+| Throughput de escritura | ~390 req/s (un escritor, `fsync` por evento) | 100k req/s (escalado horizontal) |
 
 ---
 

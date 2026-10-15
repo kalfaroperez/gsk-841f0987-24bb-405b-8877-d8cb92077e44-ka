@@ -92,6 +92,19 @@ GUÍA
   - La primera versión de los tests usaba inicializadores de campo que referenciaban otros campos (CS0236); se movieron a los constructores.
 - **Qué acepté / modifiqué / rechacé:** _TBD_
 
+## Entrada 8: Tests E2E, medición de latencias y verificación de Docker
+
+- **Fecha / fase:** 2026-10-15 · Tests E2E y despliegue
+- **Modelo / herramienta:** Claude Opus 5.5 · Claude Code
+- **Prompt (literal):**
+  > Sigue con los tests E2E de carga contra el servicio en ejecución, mide latencias reales y verifica el despliegue con Docker
+- **Respuesta (resumen):** Creó el proyecto E2E con un fixture que lanza la API compilada como proceso aparte (o apunta a `E2E_BASE_URL`), un medidor de latencias (p50/p95/p99, throughput, 5xx) y 5 escenarios: recorrido completo, límites de seguridad, carga con hot user y reintentos (verificando exactamente todos los totales), lecturas durante escrituras y tormenta de reintentos. Corrigió el Dockerfile (volumen `/data` con dueño no-root 1654, `.dockerignore`) y el compose (keys de demo configurables). Ejecutó la suite contra el proceso local y contra el contenedor, y documentó los números.
+- **Aclaraciones relevantes:**
+  - Hubo que iniciar Docker Desktop, que no estaba corriendo.
+  - Se midió también con concurrencia 1 para separar el costo del servicio (p50 de 5.6 ms) del costo de la cola. La latencia alta con 64 clientes es cola frente al único escritor (ley de Little), no lentitud del código.
+  - En Docker Desktop el throughput de escritura cae a ~120 req/s y el p99 llega a ~10 s. Se documentó tal cual, junto con la mejora concreta (group commit), en lugar de ocultarlo o ajustar el test para que se viera mejor.
+- **Qué acepté / modifiqué / rechacé:** _TBD_
+
 ---
 
 ## Plantilla de entrada

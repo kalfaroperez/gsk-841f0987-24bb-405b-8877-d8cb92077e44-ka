@@ -3,13 +3,24 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    image: leaderboard-api:local
     ports:
       - "8080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      # TBD: Leaderboard__*, Auth__*, RateLimit__* (ver README > Configuración)
+      # Demo keys for local evaluation only. Override via environment (or a secrets manager) anywhere else.
+      Auth__ApiKeys__0__Name: ingestor
+      Auth__ApiKeys__0__Key: ${LEADERBOARD_WRITER_KEY:-demo-writer-key}
+      Auth__ApiKeys__0__Roles__0: scores:write
+      Auth__ApiKeys__0__Roles__1: scores:read
+      Auth__ApiKeys__1__Name: reader
+      Auth__ApiKeys__1__Key: ${LEADERBOARD_READER_KEY:-demo-reader-key}
+      Auth__ApiKeys__1__Roles__0: scores:read
+      RateLimit__PermitsPerSecond: ${LEADERBOARD_RATE_LIMIT:-500}
+      RateLimit__Burst: ${LEADERBOARD_RATE_BURST:-1000}
     volumes:
       - leaderboard-data:/data
+    restart: unless-stopped
 
 volumes:
   leaderboard-data:
