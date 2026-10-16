@@ -45,6 +45,121 @@ flowchart LR
 
 Detalle de componentes y flujos: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
+### 3.1 Secuencia de `POST /score` (escritura)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Cliente
+    participant P as Pipeline ASP.NET
+    participant E as LeaderboardEndpoints
+    participant U as SubmitScore
+    participant D as ScoreEvent (Dominio)
+    participant S as SqliteScoreStore
+    participant DB as SQLite
+    C->>P: POST /score (X-Api-Key, Idempotency-Key)
+    P->>P: Autenticación ApiKey + rol scores:write
+    P->>P: Rate limit (token bucket por clave)
+    P->>E: PostScore(request)
+    E->>E: Verifica user_id, score, timestamp
+    E->>U: HandleAsync(command)
+    U->>D: Create(...) valida todo
+    D-->>U: Result de ScoreEvent con EventId
+    alt Validación falla
+        U-->>E: Failure(errores)
+        E-->>C: 400 ValidationProblem
+    else Válido
+        U->>S: AppendAsync(event)
+        S->>S: Espera semáforo de escritura
+        S->>DB: BEGIN IMMEDIATE
+        S->>DB: INSERT score_events ON CONFLICT DO NOTHING
+        alt 0 filas insertadas
+            S->>DB: ROLLBACK
+            S-->>U: Duplicate
+            U-->>E: Success(Duplicate)
+            E-->>C: 200 OK status duplicate
+        else 1 fila insertada
+            S->>DB: UPSERT score_buckets (total + excluded.total)
+            S->>DB: UPSERT user_totals
+            S->>DB: COMMIT
+            S-->>U: Created
+            U-->>E: Success(Created)
+            E-->>C: 201 Created status created
+        end
+    end
+```
+
+### 3.2 Secuencia de `GET /leaderboard` (lectura con caché)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Cliente
+    participant P as Pipeline ASP.NET
+    participant G as GetLeaderboard
+    participant W as AggregationWindow
+    participant K as CachedLeaderboardReadStore
+    participant S as SqliteScoreStore
+    participant DB as SQLite
+    C->>P: GET /leaderboard?top=N (X-Api-Key)
+    P->>P: Autenticación + rol scores:read + rate limit
+    P->>G: HandleAsync(top)
+    alt top fuera de 1..MaxTop
+        G-->>C: 400 ValidationProblem
+    else top válido
+        G->>W: EndingAt(now, rules)
+        W-->>G: ventana [Start, End) alineada a buckets
+        G->>K: GetTopAsync(window, n)
+        K->>K: clave = leaderboard:top:start:end:n
+        alt Hit en HybridCache
+            K-->>G: Snapshot cacheado (AsOf original)
+        else Miss (un solo hilo por clave)
+            K->>S: GetTopAsync(window, n)
+            S->>DB: SUM(total) por usuario en buckets, ORDER BY score DESC, user_id ASC, LIMIT n
+            DB-->>S: filas
+            S-->>K: Snapshot (Entries, AsOf = ahora)
+            K->>K: Guarda con TTL
+            K-->>G: Snapshot
+        end
+        G-->>P: LeaderboardView
+        P-->>C: 200 OK (ranking, window_start, window_end, generated_at)
+    end
+```
+
+### 3.3 Flujo de decisiones de `POST /score`
+
+```mermaid
+flowchart TD
+    A([POST /score]) --> B{"¿X-Api-Key válida?"}
+    B -- No --> R401[401 Unauthorized]
+    B -- Sí --> C{"¿Rol scores:write?"}
+    C -- No --> R403[403 Forbidden]
+    C -- Sí --> D{"¿Rate limit OK?"}
+    D -- No --> R429["429 + Retry-After"]
+    D -- Sí --> E{"¿Faltan user_id, score o timestamp?"}
+    E -- Sí --> R400a[400 campos requeridos]
+    E -- No --> F[ScoreEvent.Create]
+    F --> G{"¿UserId, score 0..Max, timestamp no futuro, key válida?"}
+    G -- No --> R400b[400 con todos los errores]
+    G -- Sí --> H{"¿Trae Idempotency-Key?"}
+    H -- Sí --> I["EventId = 'k:' + clave"]
+    H -- No --> J["EventId = 'h:' + SHA-256 de user, score, instante"]
+    I --> K["Semáforo de escritura + BEGIN IMMEDIATE"]
+    J --> K
+    K --> L["INSERT score_events ON CONFLICT DO NOTHING"]
+    L --> M{"¿Se insertó la fila?"}
+    M -- No --> N[ROLLBACK] --> R200[200 OK duplicate]
+    M -- Sí --> O["UPSERT score_buckets y user_totals"] --> P[COMMIT] --> R201[201 Created]
+    classDef err fill:#FCEBEB,stroke:#A32D2D,color:#791F1F
+    classDef ok fill:#EAF3DE,stroke:#3B6D11,color:#27500A
+    classDef dup fill:#FAEEDA,stroke:#854F0B,color:#633806
+    class R401,R403,R429,R400a,R400b err
+    class R201 ok
+    class R200 dup
+```
+
+`GET /user/{id}/score` sigue el mismo camino que 3.2 pero sin caché (consulta directa a `SqliteScoreStore`) y responde 404 si el usuario nunca envió puntajes.
+
 ---
 
 ## 4. Modelo de datos y lógica de agregación
